@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3 } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/context/theme-provider";
 
 const sourceSans = Source_Sans_3({
   variable: "--font-source-sans-3",
@@ -22,7 +23,9 @@ export default function RootLayout({
       <body
         className={`antialiased`}
       >
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
