@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --color-ca-black: #242423;
+    --color-ca-orange: #F5CB5C;
+    --color-ca-grey: #CFDBD5;
+    --spacing-fhd: 1920px;
+}
+
+html {
+    font-size: 16px;
+}
