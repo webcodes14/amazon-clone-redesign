@@ -1,13 +1,12 @@
-import ThemeBtn from "../theme/ThemeBtn";
+import DesktopNav from "./DesktopNav";
+import MobileNav from "./MobileNav";
 
 const HeaderNavigation = () => {
 
     return (
         <header className="max-w-fhd mx-auto w-full">
-            <div className="flex items-center justify-end p-4">
-                <ThemeBtn />
-            </div>
-            
+            <DesktopNav />
+            <MobileNav />
         </header>
     )
 }
