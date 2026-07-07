@@ -1,8 +1,7 @@
-'use client'
+'use client';
 
-import gsap from "gsap";
 import Cookies from "js-cookie";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 interface ThemeContextType {
     theme: string;
@@ -48,7 +47,6 @@ export const ThemeProvider = ({
 
 export const useTheme = () => {
     const context = useContext(ThemeContext);
-    console.log(context)
 
     if ( !context ) {
         throw new Error('useTheme must be used within a ThemeProvider');
