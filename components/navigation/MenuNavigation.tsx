@@ -5,33 +5,76 @@ import ThemeBtn from "../theme/ThemeBtn";
 import SearchBar from "./SearchBar";
 import DropdownProfile from "./DropdownProfile";
 import DropdownNotification from "./DropdownNotification";
+import useNotifications from "./useNotifications";
+import CategoryMenu from "./CategoryMenu";
+import CartDropdown from "./CartDropdown";
+import NavigationDropdown from "./NavigationDropdown";
 import { NavItemsMobile } from "./NavItems";
-import { RxHamburgerMenu } from "react-icons/rx";
 import { FaAmazon } from "react-icons/fa";
 import { usePathname } from "next/navigation";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
+import type { Category } from "@/types";
+import type { AppDispatch, RootState } from "@/redux/store";
+import { removeZeroQuantityCartProducts } from "@/redux/cartSlice";
+import { useAuth } from "@/providers/AuthProvider";
 
-const MenuNavigation = () => {
+interface MenuNavigationProps {
+    categories: Category[];
+}
+
+const dropdownNames = ["Profile", "Notification", "Cart"] as const;
+
+const MenuNavigation = ({ categories }: MenuNavigationProps) => {
     const pathname = usePathname();
+    const { user } = useAuth();
+    const dispatch = useDispatch<AppDispatch>();
+    const wishlistCount = useSelector((state: RootState) => state.wishlist.products.length);
+    const cartCount = useSelector((state: RootState) =>
+        state.cart.items.reduce((total, item) => total + item.quantity, 0)
+    );
+    const notifications = useNotifications();
 
     const [ openDropdown, setOpenDropdown ] = useState<string | null>(null);
     const [ isNavigating, setIsNavigating ] = useState(false);
     const [ prevPathname, setPrevPathname ] = useState(pathname);
 
-    const navContainer = useRef<HTMLUListElement>(null);
+    const navContainer = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const navigationRef = useRef<HTMLElement>(null);
 
-    const handleOpenDropdown = (label: string) => {
+    const handleOpenDropdown = useCallback((label: string) => {
+        if (openDropdown === "Cart") {
+            dispatch(removeZeroQuantityCartProducts());
+        }
+        if (label === "Notification" && openDropdown !== "Notification") {
+            notifications.refresh();
+        }
         setOpenDropdown(prev => prev === label ? null : label);
-    }
+    }, [dispatch, openDropdown, notifications]);
 
-    const closeAll = () => {
+    const closeAll = useCallback(() => {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement && dropdownRef.current?.contains(activeElement)) {
+            activeElement.blur();
+        }
+        if (openDropdown === "Cart") {
+            dispatch(removeZeroQuantityCartProducts());
+        }
         setOpenDropdown(null);
-    };
+    }, [dispatch, openDropdown]);
 
     const handleSubLinkClick = () => {
+        const activeElement = document.activeElement;
+        if (dropdownRef.current?.contains(activeElement) && activeElement instanceof HTMLElement) {
+            const panelName = activeElement.closest<HTMLElement>("[data-dropdown-panel]")?.dataset.dropdownPanel;
+            const trigger = panelName
+                ? navContainer.current?.querySelector<HTMLButtonElement>(`[data-dropdown-name="${panelName}"] button`)
+                : null;
+            trigger?.focus();
+        }
         setIsNavigating(true);
         closeAll();
     };
@@ -43,12 +86,33 @@ const MenuNavigation = () => {
 
     useGSAP(() => {
         const updatePosition = () => {
+            const container = navContainer.current;
+            const navigation = navigationRef.current;
             const activeItem = navContainer.current?.querySelector(".active") as HTMLElement | null;
-            
-            if (isNavigating || !activeItem) {
-                gsap.killTweensOf(".bg-indicator");
+            const indicator = navContainer.current?.querySelector(".bg-indicator") as HTMLElement | null;
 
-                gsap.to(".bg-indicator", {
+            if (!container || !indicator || !navigation || !dropdownRef.current) {
+                return;
+            }
+
+            const navigationLeft = navigation.getBoundingClientRect().left;
+            for (const name of dropdownNames) {
+                const trigger = container.querySelector<HTMLElement>(`[data-dropdown-name="${name}"]`);
+                const panel = dropdownRef.current.querySelector<HTMLElement>(`[data-dropdown-panel="${name}"]`);
+                if (!trigger || !panel) continue;
+
+                const triggerBounds = trigger.getBoundingClientRect();
+                const panelWidth = panel.getBoundingClientRect().width;
+                const desiredLeft = triggerBounds.left + triggerBounds.width / 2 - panelWidth / 2 +
+                    (name === "Cart" ? 32 : 0);
+                const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
+                panel.style.left = `${Math.max(16, Math.min(desiredLeft, maxLeft)) - navigationLeft}px`;
+            }
+
+            if (isNavigating || !activeItem) {
+                gsap.killTweensOf(indicator);
+
+                gsap.to(indicator, {
                     autoAlpha: 0,
                     duration: 0.35,
                     overwrite: true
@@ -56,17 +120,25 @@ const MenuNavigation = () => {
                 return;
             }
 
-            const indicator = navContainer.current?.querySelector(".bg-indicator") as HTMLElement;
-            const isHidden = indicator && window.getComputedStyle(indicator).opacity === "0";
+            if (!container.classList.contains("nav-indicator-ready")) {
+                gsap.set(indicator, {
+                    x: activeItem.offsetLeft,
+                    width: activeItem.offsetWidth,
+                    autoAlpha: 1
+                });
+                container.classList.add("nav-indicator-ready");
+            }
+
+            const isHidden = window.getComputedStyle(indicator).opacity === "0";
 
             if (isHidden) {
-                gsap.set(".bg-indicator", {
+                gsap.set(indicator, {
                     x: activeItem.offsetLeft,
                     width: activeItem.offsetWidth
                 });
             }
 
-            gsap.to(".bg-indicator", {
+            gsap.to(indicator, {
                 x: activeItem.offsetLeft,
                 width: activeItem.offsetWidth,
                 autoAlpha: 1,
@@ -75,19 +147,19 @@ const MenuNavigation = () => {
                 overwrite: "auto"
             });
 
-            gsap.to(dropdownRef.current, {
-                x: activeItem.offsetLeft,
-                duration: 0.35,
-                ease: "power2.out",
-                overwrite: "auto",
-            });
         }
         
         updatePosition();
 
+        const resizeObserver = new ResizeObserver(updatePosition);
+        if (navContainer.current) {
+            resizeObserver.observe(navContainer.current);
+            navContainer.current.querySelectorAll("li").forEach((item) => resizeObserver.observe(item));
+        }
         window.addEventListener("resize", updatePosition);
 
         return () => {
+            resizeObserver.disconnect();
             window.removeEventListener("resize", updatePosition);
         }
 
@@ -108,7 +180,13 @@ const MenuNavigation = () => {
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape" && openDropdown) {
+                const focusWasInDropdown = dropdownRef.current?.contains(document.activeElement);
                 closeAll();
+                if (focusWasInDropdown) {
+                    navContainer.current
+                        ?.querySelector<HTMLButtonElement>(`[data-dropdown-name="${openDropdown}"] button`)
+                        ?.focus();
+                }
             }
         };
 
@@ -123,75 +201,146 @@ const MenuNavigation = () => {
             document.removeEventListener("touchstart", handleClickOutside);
             document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [openDropdown]);
+    }, [openDropdown, closeAll]);
 
     return (
-        <div className="">
-            <nav>
+        <div className="pointer-events-none">
+            <nav aria-label="Site" className="pointer-events-none">
                 <div className="flex items-center justify-between m-4">
                     <Link 
                         href="/"
-                        className="p-3 bg-ca-orange text-white rounded-[50%] text-xl"
+                        aria-label="Amazon home"
+                        className="pointer-events-auto p-3 bg-ca-orange text-white rounded-[50%] text-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-black"
                     >
-                        <FaAmazon />
+                        <FaAmazon aria-hidden="true" />
                     </Link>
                     <ThemeBtn />
                 </div>
-                <SearchBar />
-                <div className="m-4">
-                    <button 
-                        type="button"
-                        className="p-3 bg-ca-orange text-white rounded-[50%] text-xl"
-                    >
-                        <RxHamburgerMenu />
-                    </button>
-                    <ul>
-                        
-                    </ul>
-
-                </div>
+                <SearchBar categories={categories} />
+                <CategoryMenu categories={categories} />
             </nav>
 
-            <nav className="p-6 bg-ca-grey fixed bottom-0 w-full md:top-0 md:bottom-auto md:right-20 md:max-w-xl md:mx-auto md:my-4 md:rounded-4xl md:p-[0.315rem]">
-                <button 
-                    type="button" 
-                    className="hidden w-full mt-3 px-3 py-1.5 text-sm font-medium border border-ca-black dark:border-white rounded-md cursor-pointer lg:block lg:w-20 lg:absolute lg:-left-24 lg:top-0 lg:mt-[0.313rem] lg:rounded-2xl hover:bg-ca-black hover:text-white dark:hover:bg-white dark:hover:text-ca-black transition-all duration-200"
-                >
-                    Sign in
-                </button>
-                <ul ref={navContainer} className="flex items-center justify-evenly">
+            <nav ref={navigationRef} aria-label="Primary navigation" className="pointer-events-auto p-6 bg-ca-grey fixed bottom-0 w-full md:top-0 md:bottom-auto md:right-20 md:max-w-xl md:mx-auto md:my-4 md:rounded-4xl md:p-[0.315rem]">
+                <div ref={navContainer} className="group relative">
                     <div
-                        className="bg-indicator left-0 h-10 absolute -z-10 bg-ca-black rounded-xl drop-shadow-[0px_0px_2.5px_#242423] md:h-8.5"
+                        aria-hidden="true"
+                        className="bg-indicator invisible left-0 h-10 absolute -z-10 bg-ca-black rounded-xl drop-shadow-[0px_0px_2.5px_#242423] md:h-8.5"
                     ></div>
 
-                    {NavItemsMobile.map((item) => {
-                        const Icon = item.icon;
-                        const isMenuOpen = openDropdown === item.label;
-                        const isLinkActive = item.href ? pathname === item.href : false;
-                        const isActive = isMenuOpen || isLinkActive;
+                    <ul className="flex items-center justify-evenly">
+                        {NavItemsMobile.map((item) => {
+                            const Icon = item.icon;
+                            const isMenuOpen = openDropdown === item.label;
+                            const isLinkActive = item.href ? pathname === item.href : false;
+                            const isActive = isMenuOpen || (isLinkActive && !openDropdown);
+                            const accessibleLabel =
+                                item.label === "Favorite"
+                                    ? `Wishlist${wishlistCount ? `, ${wishlistCount} saved ${wishlistCount === 1 ? "product" : "products"}` : ""}`
+                                    : item.label === "Cart" && cartCount > 0
+                                        ? `Cart, ${cartCount} ${cartCount === 1 ? "item" : "items"}`
+                                        : item.label === "Notification" && notifications.unreadCount > 0
+                                            ? `Notification, ${notifications.unreadCount} unread ${notifications.unreadCount === 1 ? "notification" : "notifications"}`
+                                        : item.label === "Profile" && user
+                                            ? user.isAnonymous ? "Profile, demo account" : `Profile for ${user.email ?? "signed-in account"}`
+                                        : item.label;
 
+                            return (
+                                <li
+                                    key={item.label}
+                                    data-dropdown-name={item.label}
+                                    className={`relative z-10 text-2xl leading-0 ${isActive ? 'active rounded-xl bg-ca-black text-white drop-shadow-[0px_0px_2.5px_#242423] group-[.nav-indicator-ready]:bg-transparent group-[.nav-indicator-ready]:drop-shadow-none' : 'text-ca-black'} md:text-lg`}
+                                >
+                                    {
+                                        item.href && item.label === "Cart" ? (
+                                            <button
+                                                type="button"
+                                                aria-label={accessibleLabel}
+                                                aria-haspopup="dialog"
+                                                aria-expanded={isMenuOpen}
+                                                aria-controls="cart-dropdown"
+                                                onClick={() => handleOpenDropdown(item.label)}
+                                                className="relative block h-full w-full cursor-pointer rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-black"
+                                            >
+                                                <Icon aria-hidden="true" />
+                                                {cartCount > 0 && (
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                                                    >
+                                                        {cartCount > 99 ? "99+" : cartCount}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ) : item.href ? (
+                                            <Link
+                                                onClick={closeAll}
+                                                aria-label={accessibleLabel}
+                                                aria-current={isLinkActive ? "page" : undefined}
+                                                id={item.label === "Favorite" ? "wishlist-nav-target" : undefined}
+                                                className={`relative block h-full w-full rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-black ${
+                                                    item.label === "Favorite" ? "wishlist-nav-link" : ""
+                                                }`}
+                                                href={item.href}
+                                            >
+                                                <Icon aria-hidden="true" />
+                                                {item.label === "Favorite" && wishlistCount > 0 && (
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                                                    >
+                                                        {wishlistCount > 99 ? "99+" : wishlistCount}
+                                                    </span>
+                                                )}
+                                            </Link>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleOpenDropdown(item.label)}
+                                                aria-label={accessibleLabel}
+                                                aria-expanded={isMenuOpen}
+                                                aria-controls={`${item.label.toLowerCase()}-dropdown`}
+                                                className="relative cursor-pointer rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-black"
+                                                type="button"
+                                            >
+                                                <Icon aria-hidden="true" />
+                                                {item.label === "Notification" && notifications.unreadCount > 0 && (
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white"
+                                                    >
+                                                        {notifications.unreadCount > 99 ? "99+" : notifications.unreadCount}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        )
+                                    }
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </div>
+                <div ref={dropdownRef} className="pointer-events-none absolute inset-0">
+                    {dropdownNames.map((name) => {
+                        const isOpen = openDropdown === name;
                         return (
-                            <li 
-                                key={item.label} 
-                                className={`relative z-10 text-2xl leading-0 text-white ${isActive ? 'active' : ''} md:text-lg`}
+                            <NavigationDropdown
+                                key={name}
+                                name={name}
+                                isOpen={isOpen}
                             >
-                                {
-                                    item.href ? 
-                                        <Link onClick={closeAll} className="p-2 block w-full h-full focus-visible:outline-0" href={item.href}><Icon /></Link> 
-                                        : 
-                                        <button onClick={() => handleOpenDropdown(item.label)} className="cursor-pointer p-2 focus-visible:outline-0" type="button"><Icon /></button>
-                                }
-                            </li>
-                        )
+                                {name === "Profile" && <DropdownProfile onClick={handleSubLinkClick} />}
+                                {name === "Notification" && (
+                                    <DropdownNotification
+                                        notifications={notifications.notifications}
+                                        unreadCount={notifications.unreadCount}
+                                        status={notifications.status}
+                                        isRead={notifications.isRead}
+                                        onMarkAllRead={notifications.markAllRead}
+                                    />
+                                )}
+                                {name === "Cart" && <CartDropdown onNavigate={closeAll} />}
+                            </NavigationDropdown>
+                        );
                     })}
-                </ul>
-                <div ref={dropdownRef} className="absolute left-0 bottom-4 mb-2 md:contents">
-                    {openDropdown === "Profile" && (
-                        <DropdownProfile onClick={handleSubLinkClick} isOpen={openDropdown === "Profile"} />
-                    )}
-                    {openDropdown === "Notification" && (
-                        <DropdownNotification isOpen={openDropdown === "Notification"} />
-                    )}
                 </div>
             </nav>
         </div>

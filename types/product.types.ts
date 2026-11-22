@@ -9,13 +9,16 @@ export interface Review {
 export interface Product {
     id: number;
     title: string;
-    description?: string;
+    description?: string | null;
+    short_description?: string | null;
+    long_description?: string | null;
     price: number;
     discount_percentage: number;
-    brand?: string;
+    brand?: string | null;
     thumbnail: string;
+    images?: string[] | null;
     category: string;
     stock: number;
     availability_status: string;
-    reviews: Review[];
+    reviews?: Review[] | null;
 }

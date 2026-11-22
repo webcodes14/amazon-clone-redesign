@@ -1,47 +1,68 @@
-'use client';
-{/* notification: slevy, akc, atd... */}
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { useRef } from "react";
+"use client";
+
+import type { ShopNotification } from "./useNotifications";
 
 interface DropdownNotificationsProps {
-    isOpen: boolean;
+    notifications: ShopNotification[];
+    unreadCount: number;
+    status: "loading" | "ready" | "error";
+    isRead: (key: string) => boolean;
+    onMarkAllRead: () => void;
 }
 
-const DropdownNotification = ({ isOpen }: DropdownNotificationsProps) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useGSAP(
-        () => {
-            if (isOpen) {
-                gsap.fromTo(containerRef.current, {
-                    autoAlpha: 0,
-                    y: 0,
-                    duration: 0.3,
-                    ease: "power2.out",
-                }, {
-                    autoAlpha: 1,
-                    y: 0,
-                    duration: 0.3,
-                    ease: "power2.in"
-                });
-            } 
-        }, { dependencies: [isOpen], scope: containerRef }
-    );
-
+const DropdownNotification = ({
+    notifications,
+    unreadCount,
+    status,
+    isRead,
+    onMarkAllRead,
+}: DropdownNotificationsProps) => {
     return (
-        <div ref={containerRef} className="fixed bottom-17 w-52 bg-white rounded-xl border p-4 z-50 shadow-xl border-ca-grey dark:border-white/20 dark:bg-ca-black text-ca-black dark:text-white md:top-16 md:bottom-auto md:right-auto md:left-auto md:ml-20">
-            <h4 className="font-bold text-sm tracking-wide">Notifications</h4>
-            
-            <hr className="my-2.5 border-ca-grey/30 dark:border-white/10" />
-
-            <p className="dropdown-item text-sm dark:text-white/70">
-                You have no new notifications.
-            </p>
-
-            {/* dynamické a jen informační seznam */}
+        <div
+            role="region"
+            aria-label="Notifications"
+            className="rounded-xl border border-ca-grey bg-white p-4 text-ca-black dark:border-white/20 dark:bg-ca-black dark:text-white"
+        >
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold tracking-wide">Notifications</h2>
+                <button
+                    type="button"
+                    onClick={onMarkAllRead}
+                    disabled={unreadCount === 0 || status === "loading"}
+                    className="cursor-pointer text-xs font-semibold underline underline-offset-2 hover:text-ca-orange focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-orange disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    Mark all as read
+                </button>
+            </div>
+            {status === "loading" && (
+                <p className={notifications.length > 0 ? "sr-only" : "mt-3 text-sm"} role="status">
+                    Loading notifications...
+                </p>
+            )}
+            {status === "error" && (
+                <p className="mt-3 text-sm" role="status">Product notifications are temporarily unavailable.</p>
+            )}
+            {status === "ready" && notifications.length === 0 && (
+                <p className="mt-3 text-sm text-ca-black/70 dark:text-white/70">You have no notifications.</p>
+            )}
+            {notifications.length > 0 && (
+                <ul className="mt-3 max-h-80 divide-y divide-ca-grey/40 overflow-y-auto border-t border-ca-grey/40 dark:divide-white/10 dark:border-white/10">
+                    {notifications.map(({ key, message }) => (
+                        <li key={key} className="flex items-start gap-3 py-3 text-sm">
+                            <span
+                                aria-hidden="true"
+                                className={`mt-1.5 size-2 shrink-0 rounded-full ${isRead(key) ? "bg-transparent" : "bg-ca-orange"}`}
+                            />
+                            <span className={isRead(key) ? "text-ca-black/65 dark:text-white/65" : "font-semibold"}>
+                                {!isRead(key) && <span className="sr-only">Unread: </span>}
+                                {message}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
-    )
-}
+    );
+};
 
 export default DropdownNotification;

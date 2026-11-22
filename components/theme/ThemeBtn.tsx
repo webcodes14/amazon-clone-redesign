@@ -31,7 +31,7 @@ const ThemeBtn = () => {
             type="button"
             aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
             title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            className="theme__btn w-12 h-6 border-2 border-ca-grey rounded-xl cursor-pointer"
+            className="theme__btn pointer-events-auto w-12 h-6 border-2 border-ca-grey rounded-xl bg-white dark:bg-ca-black cursor-pointer"
         >
             <span
                 ref={btnRef}

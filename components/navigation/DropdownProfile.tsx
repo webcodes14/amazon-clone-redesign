@@ -1,50 +1,100 @@
-'use client';
-{/* profile: časté dotazy, přihlášení, support, kontakt */}
-{/* přihlášení jako modal? */}
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { FaArrowRightLong } from "react-icons/fa6";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import { useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/providers/AuthProvider";
 
 interface DropdownProfileProps {
     onClick: () => void;
-    isOpen: boolean;
 }
 
-const DropdownProfile = ({ onClick, isOpen }: DropdownProfileProps) => {
-    const containerRef = useRef<HTMLDivElement>(null);
+const DropdownProfile = ({ onClick }: DropdownProfileProps) => {
+    const router = useRouter();
+    const { user } = useAuth();
+    const [signOutError, setSignOutError] = useState("");
 
-    useGSAP(
-        () => {
-            if (isOpen) {
-                gsap.fromTo(containerRef.current, {
-                    autoAlpha: 0,
-                    y: 0,
-                    duration: 0.3,
-                    ease: "power2.out",
-                }, {
-                    autoAlpha: 1,
-                    y: 0,
-                    duration: 0.3,
-                    ease: "power2.in"
-                });
-            } 
-        }, { dependencies: [isOpen], scope: containerRef }
-    );
+    const handleSignOut = async () => {
+        setSignOutError("");
+        try {
+            const { error } = await createClient().auth.signOut({ scope: "local" });
+            if (error) {
+                setSignOutError("Could not sign out. Please try again.");
+                return;
+            }
+        } catch {
+            setSignOutError("Could not sign out. Please try again.");
+            return;
+        }
+        onClick();
+        router.replace("/");
+        router.refresh();
+    };
 
     return (
-        <div ref={containerRef} className="fixed bottom-17 w-52 bg-white rounded-xl border p-4 z-50 shadow-xl border-ca-grey dark:border-white/20 dark:bg-ca-black text-ca-black dark:text-white origin-bottom md:top-16 md:bottom-auto md:right-auto md:left-auto md:-ml-6">
+        <div className="rounded-xl border border-ca-grey bg-white p-4 text-ca-black dark:border-white/20 dark:bg-ca-black dark:text-white">
             <h4 className="font-bold text-sm tracking-wide">Profile</h4>
 
-            <button 
-                type="button" 
-                className="w-full mt-3 px-3 py-1.5 text-sm font-medium border border-ca-black dark:border-white rounded-md cursor-pointer lg:hidden hover:bg-ca-black hover:text-white dark:hover:bg-white dark:hover:text-ca-black transition-all duration-200"
-            >
-                Sign in
-            </button>
-
-            <hr className="my-3 border-ca-grey/30 dark:border-white/10" />
+            {user ? (
+                <>
+                    <p className="mt-3 truncate px-3 text-xs text-ca-black/65 dark:text-white/65">
+                        {user.isAnonymous ? "Private demo account" : user.email}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                        <li className="dropdown-item group">
+                            <Link
+                                className="flex items-center justify-between rounded-md border border-transparent px-3 py-2 text-sm transition-all duration-200 hover:border-ca-grey dark:hover:border-white/30 hover:bg-ca-grey/10 dark:hover:bg-white/5"
+                                onClick={onClick}
+                                href="/account"
+                            >
+                                <span>My account</span>
+                                <FaArrowRightLong aria-hidden="true" className="text-xs opacity-0 -translate-x-1 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />
+                            </Link>
+                        </li>
+                        <li className="dropdown-item group">
+                            <Link
+                                className="flex items-center justify-between rounded-md border border-transparent px-3 py-2 text-sm transition-all duration-200 hover:border-ca-grey dark:hover:border-white/30 hover:bg-ca-grey/10 dark:hover:bg-white/5"
+                                onClick={onClick}
+                                href="/orders"
+                            >
+                                <span>My demo orders</span>
+                                <FaArrowRightLong aria-hidden="true" className="text-xs opacity-0 -translate-x-1 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />
+                            </Link>
+                        </li>
+                    </ul>
+                    {user.isAnonymous && (
+                        <Link
+                            href="/auth?mode=sign-up"
+                            onClick={onClick}
+                            className="mt-3 block rounded-md bg-ca-grey/20 px-3 py-2 text-center text-sm font-semibold hover:bg-ca-grey/40 dark:bg-white/10 dark:hover:bg-white/20"
+                        >
+                            Create account to keep orders
+                        </Link>
+                    )}
+                    <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="mt-3 w-full cursor-pointer rounded-md border border-ca-black px-3 py-2 text-sm font-semibold transition-colors hover:bg-ca-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-ca-black"
+                    >
+                        {user.isAnonymous ? "End demo session" : "Sign out"}
+                    </button>
+                    {signOutError && <p role="alert" className="mt-2 text-xs text-red-700 dark:text-red-300">{signOutError}</p>}
+                    <hr className="my-3 border-ca-grey/30 dark:border-white/10" />
+                </>
+            ) : (
+                <>
+                    <Link
+                        href="/auth"
+                        onClick={onClick}
+                        className="mt-3 block w-full rounded-md border border-ca-black px-3 py-2 text-center text-sm font-semibold transition-colors hover:bg-ca-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-ca-black"
+                    >
+                        Sign in or create account
+                    </Link>
+                    <hr className="my-3 border-ca-grey/30 dark:border-white/10" />
+                </>
+            )}
 
             <ul className="space-y-1">
                 <li className="dropdown-item group">
@@ -54,6 +104,19 @@ const DropdownProfile = ({ onClick, isOpen }: DropdownProfileProps) => {
                         href="/support"
                     >
                         <span>Support</span>
+                        <span className="text-xs opacity-0 -translate-x-1 transition-all duration-200 ease-out group-hover:opacity-100 group-hover:translate-x-0">
+                            <FaArrowRightLong />
+                        </span>
+                    </Link>
+                </li>
+
+                <li className="dropdown-item group">
+                    <Link
+                        className="flex items-center justify-between px-3 py-2 text-sm rounded-md transition-all duration-200 border border-transparent hover:border-ca-grey dark:hover:border-white/30 hover:bg-ca-grey/10 dark:hover:bg-white/5"
+                        onClick={onClick}
+                        href="/faq"
+                    >
+                        <span>FAQ</span>
                         <span className="text-xs opacity-0 -translate-x-1 transition-all duration-200 ease-out group-hover:opacity-100 group-hover:translate-x-0">
                             <FaArrowRightLong />
                         </span>
