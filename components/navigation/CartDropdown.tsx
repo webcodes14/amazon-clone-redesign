@@ -8,7 +8,7 @@ import { getDiscountedPrice } from "@/lib/pricing";
 import type { RootState } from "@/redux/store";
 
 interface CartDropdownProps {
-    onNavigate: () => void;
+    onNavigate: (href: string) => void;
 }
 
 const CartDropdown = ({ onNavigate }: CartDropdownProps) => {
@@ -69,7 +69,7 @@ const CartDropdown = ({ onNavigate }: CartDropdownProps) => {
             {items.length === 0 && (
                 <Link
                     href="/all-products"
-                    onClick={onNavigate}
+                    onClick={() => onNavigate("/all-products")}
                     className="mb-3 inline-flex text-sm font-semibold text-ca-black underline underline-offset-2 hover:text-ca-orange dark:text-white"
                 >
                     Browse products
@@ -77,7 +77,7 @@ const CartDropdown = ({ onNavigate }: CartDropdownProps) => {
             )}
             <Link
                 href="/cart"
-                onClick={onNavigate}
+                onClick={() => onNavigate("/cart")}
                 className="flex w-full items-center justify-center rounded-md bg-ca-orange px-4 py-2.5 text-sm font-semibold text-ca-black transition-colors hover:bg-ca-orange/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ca-orange"
             >
                 View cart

@@ -12,14 +12,15 @@ import NavigationDropdown from "./NavigationDropdown";
 import { NavItemsMobile } from "./NavItems";
 import { FaAmazon } from "react-icons/fa";
 import { usePathname } from "next/navigation";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
 import type { Category } from "@/types";
 import type { AppDispatch, RootState } from "@/redux/store";
 import { removeZeroQuantityCartProducts } from "@/redux/cartSlice";
 import { useAuth } from "@/providers/AuthProvider";
+
+const useIsomorphicLayoutEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 interface MenuNavigationProps {
     categories: Category[];
@@ -40,10 +41,12 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
     const [ openDropdown, setOpenDropdown ] = useState<string | null>(null);
     const [ isNavigating, setIsNavigating ] = useState(false);
     const [ prevPathname, setPrevPathname ] = useState(pathname);
+    const [ pendingPathname, setPendingPathname ] = useState<string | null>(null);
 
     const navContainer = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const navigationRef = useRef<HTMLElement>(null);
+    const indicatorTarget = useRef<{ x: number; width: number } | null | undefined>(undefined);
 
     const handleOpenDropdown = useCallback((label: string) => {
         if (openDropdown === "Cart") {
@@ -66,6 +69,11 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
         setOpenDropdown(null);
     }, [dispatch, openDropdown]);
 
+    const handleDropdownNavigate = useCallback((href: string) => {
+        setPendingPathname(href);
+        closeAll();
+    }, [closeAll]);
+
     const handleSubLinkClick = () => {
         const activeElement = document.activeElement;
         if (dropdownRef.current?.contains(activeElement) && activeElement instanceof HTMLElement) {
@@ -82,9 +90,10 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
     if (prevPathname !== pathname) {
         setPrevPathname(pathname);
         setIsNavigating(false);
+        setPendingPathname(null);
     }
 
-    useGSAP(() => {
+    useIsomorphicLayoutEffect(() => {
         const updatePosition = () => {
             const container = navContainer.current;
             const navigation = navigationRef.current;
@@ -110,41 +119,58 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
             }
 
             if (isNavigating || !activeItem) {
-                gsap.killTweensOf(indicator);
+                if (indicatorTarget.current === null) {
+                    return;
+                }
 
+                indicatorTarget.current = null;
+                gsap.killTweensOf(indicator);
                 gsap.to(indicator, {
                     autoAlpha: 0,
-                    duration: 0.35,
-                    overwrite: true
+                    duration: 0.18,
+                    ease: "power2.out"
                 });
                 return;
             }
 
+            const target = { x: activeItem.offsetLeft, width: activeItem.offsetWidth };
+
             if (!container.classList.contains("nav-indicator-ready")) {
                 gsap.set(indicator, {
-                    x: activeItem.offsetLeft,
-                    width: activeItem.offsetWidth,
+                    ...target,
                     autoAlpha: 1
                 });
                 container.classList.add("nav-indicator-ready");
+                indicatorTarget.current = target;
+                return;
             }
 
             const isHidden = window.getComputedStyle(indicator).opacity === "0";
 
             if (isHidden) {
+                gsap.killTweensOf(indicator);
                 gsap.set(indicator, {
-                    x: activeItem.offsetLeft,
-                    width: activeItem.offsetWidth
+                    ...target
                 });
             }
 
+            const previousTarget = indicatorTarget.current;
+            if (
+                !isHidden &&
+                previousTarget &&
+                previousTarget.x === target.x &&
+                previousTarget.width === target.width
+            ) {
+                return;
+            }
+
+            indicatorTarget.current = target;
+            gsap.killTweensOf(indicator);
             gsap.to(indicator, {
-                x: activeItem.offsetLeft,
-                width: activeItem.offsetWidth,
+                ...target,
                 autoAlpha: 1,
-                duration: 0.35,
-                ease: 'power2.out',
-                overwrite: "auto"
+                duration: 0.18,
+                ease: "power2.out"
             });
 
         }
@@ -163,7 +189,7 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
             window.removeEventListener("resize", updatePosition);
         }
 
-    }, { dependencies: [openDropdown, pathname, isNavigating], scope: navContainer });
+    }, [openDropdown, pathname, isNavigating, pendingPathname]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -231,7 +257,7 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
                         {NavItemsMobile.map((item) => {
                             const Icon = item.icon;
                             const isMenuOpen = openDropdown === item.label;
-                            const isLinkActive = item.href ? pathname === item.href : false;
+                            const isLinkActive = item.href ? (pendingPathname ?? pathname) === item.href : false;
                             const isActive = isMenuOpen || (isLinkActive && !openDropdown);
                             const accessibleLabel =
                                 item.label === "Favorite"
@@ -273,7 +299,10 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
                                             </button>
                                         ) : item.href ? (
                                             <Link
-                                                onClick={closeAll}
+                                                onClick={() => {
+                                                    setPendingPathname(item.href ?? null);
+                                                    closeAll();
+                                                }}
                                                 aria-label={accessibleLabel}
                                                 aria-current={isLinkActive ? "page" : undefined}
                                                 id={item.label === "Favorite" ? "wishlist-nav-target" : undefined}
@@ -337,7 +366,7 @@ const MenuNavigation = ({ categories }: MenuNavigationProps) => {
                                         onMarkAllRead={notifications.markAllRead}
                                     />
                                 )}
-                                {name === "Cart" && <CartDropdown onNavigate={closeAll} />}
+                                {name === "Cart" && <CartDropdown onNavigate={handleDropdownNavigate} />}
                             </NavigationDropdown>
                         );
                     })}
